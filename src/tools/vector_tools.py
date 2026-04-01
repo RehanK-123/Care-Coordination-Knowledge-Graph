@@ -58,6 +58,8 @@ class VectorTools:
         except ImportError as e:
             print(f"⚠️  VectorDB modules not available: {e}")
             self._available = False
+        
+        print("Constructor - i am here")
 
     def _resolve_patient_id(self, patient_name: str) -> Optional[str]:
         """Convert a patient name to patient_id using fuzzy match."""
@@ -66,6 +68,7 @@ class VectorTools:
         ]
         if matches.empty:
             return None
+        print("Resolve patient id - i am here")
         return matches.iloc[0]["patient_id"]
 
     def _get_patient_name(self, patient_id: str) -> str:
@@ -73,6 +76,7 @@ class VectorTools:
         match = self.patients[self.patients["patient_id"] == patient_id]
         if match.empty:
             return patient_id
+        print("Get patient name - i am here")
         return match.iloc[0]["name"]
 
     # ═══════════════════════════════════════════════════════════════
@@ -116,6 +120,7 @@ class VectorTools:
             high_risk_count = sum(1 for v in result.labels.values() if v == "High Risk")
             low_risk_count = sum(1 for v in result.labels.values() if v == "Low Risk")
 
+            print("Get financial risk - i am here")
             return {
                 "patient": self._get_patient_name(patient_id),
                 "patient_id": patient_id,
@@ -161,7 +166,6 @@ class VectorTools:
                 diseases=self.diseases,
                 encounters=self.encounters,
             )
-
             care_label = result.labels.get(patient_id, "Unknown")
 
             # Get patient-specific care stats
@@ -173,6 +177,7 @@ class VectorTools:
             optimal_count = sum(1 for v in result.labels.values() if v == "Optimal Care")
             non_optimal_count = sum(1 for v in result.labels.values() if v == "Non-Optimal Care")
 
+            print("Get care coordination - i am here")
             return {
                 "patient": self._get_patient_name(patient_id),
                 "patient_id": patient_id,
@@ -233,6 +238,7 @@ class VectorTools:
                     "rank": entry["rank"],
                 })
 
+            print("Get similar patients - i am here")
             return {
                 "query_patient": self._get_patient_name(patient_id),
                 "similar_patients": similar,
@@ -279,6 +285,7 @@ class VectorTools:
             for label in care_result.labels.values():
                 care_dist[label] = care_dist.get(label, 0) + 1
 
+            print("Get cluster summary - i am here")
             return {
                 "total_patients": len(self.patients),
                 "financial_risk": {

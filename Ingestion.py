@@ -1,12 +1,13 @@
 import json
 import os
+import pandas as pd 
 
 def extract_provider_id(ref):
     if ref and "npi|" in ref:
         return ref.split("|")[-1]
     return None
 
-def save_data(data):
+def extract(data):
     patients = []
     providers = []
     diseases = []
@@ -71,25 +72,25 @@ def save_data(data):
                 "encounter_id": r["item"][0]["encounter"][0]["reference"].split(":")[-1],
                 "patient_id": patient_id,
                 "amount": r["total"]["value"],
-            # "provider_id": r["provider"]["reference"].split("|")[-1] if r.get("provider") else None,
                 "billable_period_start": billable_period_start,
                 "billable_period_end": billable_period_end
             })
 
             payers.append({"claim_id": r["id"], "payer": r["insurance"][0]["coverage"]["display"]})
+        
+    return {"patients": patients, "providers": providers, "diseases": diseases, "encounters": encounters, "claims": claims, "payers": payers}
 
-        # ---------------- EOB ---------------- #
-        elif rtype == "ExplanationOfBenefit":
-            payer = r.get("insurer", {}).get("display")
-            if payer:
-                payers.append({"claim_id": r["id"], "payer": payer})
+def extract_and_save_data(fhir_json, output_dir="output"):
+    result = extract(fhir_json)
 
+    patients = result["patients"]
+    providers = result["providers"]
+    diseases = result["diseases"]
+    encounters = result["encounters"]
+    claims = result["claims"]
+    payers = result["payers"]
+    print("Extracted data:", result)
 
-
-
-    import pandas as pd
-
-    # ---------------- CONVERT TO DATAFRAMES ---------------- #
     patients_df = pd.DataFrame(patients)
     providers_df = pd.DataFrame(providers)
     diseases_df = pd.DataFrame(diseases)
@@ -97,22 +98,24 @@ def save_data(data):
     claims_df = pd.DataFrame(claims)
     payers_df = pd.DataFrame(payers)
 
-    # ---------------- SAVE AS CSV ---------------- #
-    patients_df.to_csv("output/patients.csv", index=False, mode="a+", header=not pd.io.common.file_exists("output/patients.csv"))
-    providers_df.to_csv("output/providers.csv", index=False, mode="a+", header=not pd.io.common.file_exists("output/providers.csv"))
-    diseases_df.to_csv("output/diseases.csv", index=False, mode="a+", header=not pd.io.common.file_exists("output/diseases.csv"))
-    encounters_df.to_csv("output/encounters.csv", index=False, mode="a+", header=not pd.io.common.file_exists("output/encounters.csv"))
-    claims_df.to_csv("output/claims.csv", index=False, mode="a+", header=not pd.io.common.file_exists("output/claims.csv"))
-    payers_df.to_csv("output/payers.csv", index=False, mode="a+", header=not pd.io.common.file_exists("output/payers.csv"))
+    os.makedirs(output_dir, exist_ok=True)
+    patients_df.to_csv(os.path.join(output_dir, "patients.csv"), index=False, mode="a+", header=not os.path.exists(os.path.join(output_dir, "patients.csv")))
+    providers_df.to_csv(os.path.join(output_dir, "providers.csv"), index=False, mode="a+", header=not os.path.exists(os.path.join(output_dir, "providers.csv")))
+    diseases_df.to_csv(os.path.join(output_dir, "diseases.csv"), index=False, mode="a+", header=not os.path.exists(os.path.join(output_dir, "diseases.csv")))
+    encounters_df.to_csv(os.path.join(output_dir, "encounters.csv"), index=False, mode="a+", header=not os.path.exists(os.path.join(output_dir, "encounters.csv")))
+    claims_df.to_csv(os.path.join(output_dir, "claims.csv"), index=False, mode="a+", header=not os.path.exists(os.path.join(output_dir, "claims.csv")))
+    payers_df.to_csv(os.path.join(output_dir, "payers.csv"), index=False, mode="a+", header=not os.path.exists(os.path.join(output_dir, "payers.csv")))
 
     print("✅ CSV files created successfully!")
 
 
+if __name__ == "__main__":
+    print("Ingestion")
 
-files = [file for file in os.listdir("synthea_sample_data_fhir_latest") if file.endswith(".json")]
+    files = [file for file in os.listdir("synthea_sample_data_fhir_latest") if file.endswith(".json")]
 
-for file in files:
-    with open(f"synthea_sample_data_fhir_latest/{file}") as f:
-        data = json.load(f)
-    print(f"Processing {file}...")
-    save_data(data)
+    for file in files[:1]:
+        with open(f"synthea_sample_data_fhir_latest/{file}") as f:
+            data = json.load(f)
+        print(f"Processing {file}...")
+        extract_and_save_data(data)

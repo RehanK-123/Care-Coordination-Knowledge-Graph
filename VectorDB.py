@@ -355,3 +355,6 @@ for name, (embeddings, _) in collections.items():
     client.upload_points(collection_name=name, points=points, batch_size=500)
 
 print("✅ Clinical, financial, behavioural, and hybrid embeddings stored in Qdrant!")
+
+if __name__ == "__main__":
+    print("VectorDB")
