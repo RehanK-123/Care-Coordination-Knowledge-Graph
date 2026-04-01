@@ -1,0 +1,21 @@
+pandas
+numpy
+networkx
+chromadb
+scikit-learn
+matplotlib
+seaborn
+plotly
+pyvis
+umap-learn
+python-louvain
+jupyter
+pyyaml
+neo4j
+openai
+ipykernel
+
+# Vector DB dependencies (require Python <= 3.12, install on teammate 2's machine)
+# tensorflow
+# fasttext
+# qdrant-client

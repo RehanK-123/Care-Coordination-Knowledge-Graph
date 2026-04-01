@@ -4,7 +4,7 @@ from neo4j import GraphDatabase
 # ── Connection ───────────────────────────────────────────────
 driver = GraphDatabase.driver(
     "neo4j://127.0.0.1:7687",
-    auth=("neo4j", "Poseidon534")
+    auth=("neo4j", "12345678")
 )
 
 # ── Load CSVs ────────────────────────────────────────────────
@@ -36,7 +36,7 @@ def batch_run(session, cypher, df, label="", size=500):
     print(f"  ✓ {label}: {total} rows")
 
 # ── Build graph ──────────────────────────────────────────────
-with driver.session(database="care-db") as s:
+with driver.session(database="neo4j") as s:
 
     s.run("MATCH (n) DETACH DELETE n")
     print("✓ Graph cleared")
@@ -168,7 +168,7 @@ with driver.session(database="care-db") as s:
 # ── Verification ───────────────────────────────────────────
 print("\n── Final counts ──────────────────")
 
-with driver.session(database="care-db") as s:
+with driver.session(database="neo4j") as s:
     for label in ["Patient","Provider","Encounter","Disease","Claim","Payer"]:
         n = s.run(f"MATCH (n:{label}) RETURN count(n) AS c").single()["c"]
         print(f"{label}: {n}")
