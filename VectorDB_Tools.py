@@ -21,7 +21,8 @@ from VectorDB_Helper import (
     classify_care_coordination,
     find_similar_patients,
     _get_qdrant_client,
-    _patients_in_qdrant
+    _patients_in_qdrant,
+    _fetch_embeddings_from_qdrant,
 )
 
 from VectorDB import (
@@ -37,7 +38,7 @@ from Ingestion import extract
 # 🧠 1. INPUT ROUTER (LLM ENTRY POINT)
 # ─────────────────────────────────────────────────────────
 
-def handle_llm_input(input_data: Union[str, dict]):
+def handle_llm_input(input_data: Union[str, dict], embedding_space: Optional[str] = None):
     """
     Handles:
     - FHIR JSON → ingestion + embeddings
@@ -95,14 +96,37 @@ def handle_llm_input(input_data: Union[str, dict]):
         print("[Router] Patient ID detected")
 
         client = _get_qdrant_client()
-        exists = _patients_in_qdrant(client, "hybrid", [input_data])
+        exists = _patients_in_qdrant(client, embedding_space or "hybrid", [input_data])
+        embeddings = _fetch_embeddings_from_qdrant(client, embedding_space or "hybrid", [input_data]) if exists else None # ✅ critical fix: only fetch if exists
 
         if not exists:
             return {"error": "Patient not found in Qdrant"}
+        patients_csv = pd.read_csv("output/patients.csv")  # Assuming we have a local CSV backup for metadata
+        diseases = pd.read_csv("output/diseases.csv")
+        claims_csv = pd.read_csv("output/claims.csv")
+        encounters_csv = pd.read_csv("output/encounters.csv")
 
+        try: 
+            #Extracting relevant cluster summary info for the patient from the CSVs
+            patients = patients_csv[patients_csv["patient_id"] == input_data].to_dict()
+            diseases = diseases[diseases["patient_id"] == input_data].to_dict()
+            claims = claims_csv[claims_csv["patient_id"] == input_data].to_dict()
+            encounters = encounters_csv[encounters_csv["patient_id"] == input_data].to_dict
+        
+        except Exception as e:
+            print(f"Error fetching patient data from CSV: {e}")
+            
         return {
             "status": "patient_found",
-            "patient_id": input_data,
+            "data": {
+                "patients": patients,
+                "diseases": diseases,
+                "claims": claims,
+                "encounters": encounters,
+            },   
+            "embeddings": {
+                embedding_space : embeddings[input_data] if embeddings else None,
+            },
             "available_tools": ["financial_risk", "care_coordination", "similarity"]
         }
 
@@ -190,13 +214,17 @@ def mcp_similarity_tool(input_payload: dict):
     precomputed = None
     if "embeddings" in input_payload and embedding_space in input_payload["embeddings"]:
         precomputed = np.array(input_payload["embeddings"][embedding_space])
-
+    else:
+        print(f"Warning: No precomputed embeddings found for space '{embedding_space}', Patient might not exist in the system.")
+        return {"error": f"No precomputed embeddings for space '{embedding_space}'"}
+    print(type(precomputed), precomputed.shape)
+    precomputed = precomputed.reshape(-1, precomputed.shape[-1])  # Ensure correct shape for Qdrant
     result = find_similar_patients(
         query_patient_id=input_payload["query_patient_id"],
         patients=pd.DataFrame(input_payload["patients"]),
         embedding_space=embedding_space,
         top_k=input_payload.get("top_k", 10),
-        precomputed_embeddings=precomputed  # ✅ FIX
+        precomputed_embeddings=precomputed # ✅ FIX
     )
 
     return {
@@ -223,19 +251,21 @@ MCP_TOOLS = {
 
 if __name__ == "__main__":
     input_dic = json.load(open("fhir/Wilson960_Heathcote539_a8267e63-5207-4c6d-8f40-2e5ef1e0090d.json"))
-    print(type(input_dic))
     response = handle_llm_input(input_dic)
     print("\nFHIR Response:\n", response)
 
     # Example 2: Patient ID input
-    # response = handle_llm_input("P001")
-    # print("\nPatient ID Response:\n", response)
+    response = handle_llm_input("82fe330a-0d78-4724-9cfc-7d90b2ed2e0a", embedding_space="hybrid")
+    print("\nPatient ID Response:\n", response)
 
     # Example 3: Tool call
     tool_payload = {
     **response["data"],          # patients, claims, etc.
-    "embeddings": response["embeddings"],  # ✅ critical
+    "embedding_space": "hybrid",  # specify which embedding space to use
+    "embeddings": response["embeddings"], # ✅ critical
+    "query_patient_id": "82fe330a-0d78-4724-9cfc-7d90b2ed2e0a",  # for similarity tool  
+    "qdrant_status": response.get("status")  # ✅ critical
 }
-
-    tool_output = mcp_cluster_financial_risk_tool(tool_payload)
+    # print(tool_payload)
+    tool_output = mcp_similarity_tool(tool_payload)
     print("\nTool Output:\n", tool_output)

@@ -270,7 +270,7 @@ def classify_care_coordination(
     clin_scaler = pkl.load(open("models/clinical_scaler.pkl", "rb"))
     clin_scaled = clin_scaler.fit_transform(clin_emb)
 
-    km = pkl.load(open("models/care_coordination_km.pkl", "rb"))
+    km = pkl.load(open("models/care_coordination_kmeans.pkl", "rb"))
     cluster_labels = km.predict(clin_scaled.astype(np.float64))
 
     # ── Build behavioural attributes for cluster profiling ───────────────────
@@ -353,26 +353,36 @@ def find_similar_patients(
         raise ValueError(f"embedding_space must be one of clinical/financial/behavioural/hybrid, got '{embedding_space}'")
 
     client = _get_qdrant_client()
-    all_pids = patients["patient_id"].tolist()
+    patients_csv = pd.read_csv("output/patients.csv")
+    all_pids = patients_csv["patient_id"].tolist()
+
+    all_pids_input = patients["patient_id"].tolist()
 
     if query_patient_id not in all_pids:
         raise ValueError(f"query_patient_id '{query_patient_id}' not found in patients DataFrame.")
     
     emb = precomputed_embeddings if precomputed_embeddings is not None else get_hybrid_embeddings(
-        get_clinical_embeddings(patients, diseases, encounters, claims),
-        get_financial_embeddings(patients, claims, encounters),
+        get_clinical_embeddings(diseases, patients),
+        get_financial_embeddings(patients,encounters,claims),
         get_behavioural_embeddings(patients, encounters)
     )
 
     # ── Cosine similarity ────────────────────────────────────────────────────
-    query_idx = all_pids.index(query_patient_id)
+    query_idx = all_pids_input.index(query_patient_id)
+    complete_vec_space = _fetch_embeddings_from_qdrant(client, embedding_space, all_pids[:300])  # sanity check with first 300 patients in Qdrant
+
+    complete_vec_space = np.array([vec for pid, vec in complete_vec_space.items() if pid in all_pids])
     query_vec = emb[query_idx].reshape(1, -1)
-    sims = cosine_similarity(query_vec, emb)[0]
-    sims[query_idx] = -1  # exclude self
+
+    # print(emb.shape, query_vec.shape, complete_vec_space.shape)
+    # print(cosine_similarity(query_vec, complete_vec_space).shape)
+
+    sims = cosine_similarity(query_vec, complete_vec_space)[0]
+    # sims[query_idx] = -1  # exclude self
 
     # Apply threshold
-    valid_mask = sims >= similarity_threshold
-    valid_indices = np.where(valid_mask)[0]
+    rank = np.argsort(sims)[::-1]
+    valid_indices = np.where(rank)[0]
     ranked = valid_indices[np.argsort(sims[valid_indices])[::-1]][:top_k]
 
     similar = [
@@ -394,7 +404,6 @@ def find_similar_patients(
         metadata={
             "n_corpus": len(all_pids),
             "embedding_dim": emb.shape[1],
-            "similarity_threshold": similarity_threshold,
             "mean_similarity": round(float(np.mean([s["similarity"] for s in similar])), 4) if similar else 0,
         },
     )
