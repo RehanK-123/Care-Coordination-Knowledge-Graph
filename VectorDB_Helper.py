@@ -265,7 +265,7 @@ def classify_care_coordination(
     client = _get_qdrant_client()
     all_pids = patients["patient_id"].tolist()
 
-    clin_emb = precomputed_embeddings if precomputed_embeddings is not None else get_clinical_embeddings(patients, diseases, encounters, claims)
+    clin_emb = precomputed_embeddings if precomputed_embeddings is not None else get_clinical_embeddings(diseases, patients)
     # ── Scale + cluster ──────────────────────────────────────────────────────
     clin_scaler = pkl.load(open("models/clinical_scaler.pkl", "rb"))
     clin_scaled = clin_scaler.fit_transform(clin_emb)
@@ -378,7 +378,7 @@ def find_similar_patients(
     # print(cosine_similarity(query_vec, complete_vec_space).shape)
 
     sims = cosine_similarity(query_vec, complete_vec_space)[0]
-    # sims[query_idx] = -1  # exclude self
+    sims[query_idx] = -1  # exclude self
 
     # Apply threshold
     rank = np.argsort(sims)[::-1]
@@ -410,3 +410,5 @@ def find_similar_patients(
 
 
 
+if __name__ == "__main__":
+    print("VectorDB_Helper")

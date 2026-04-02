@@ -269,3 +269,8 @@ if __name__ == "__main__":
     # print(tool_payload)
     tool_output = mcp_similarity_tool(tool_payload)
     print("\nTool Output:\n", tool_output)
+
+
+
+if __name__ == "__main__":
+    print("VectorDB_Tools")
